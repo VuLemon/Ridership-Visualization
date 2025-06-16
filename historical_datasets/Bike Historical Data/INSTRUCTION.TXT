@@ -1,0 +1,2 @@
+1. Remove this instruction file before running. The main script scans for CSV file, and this thing will cause issues
+2. Populate this file with citi_bike_data. Source can be found here: https://www.kaggle.com/datasets/rosenthal/citi-bike-stations/data. Unarchive, then place the datasets in here

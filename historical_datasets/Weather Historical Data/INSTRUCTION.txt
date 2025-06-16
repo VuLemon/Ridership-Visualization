@@ -1,0 +1,2 @@
+1. Remove this instruction file before running. The main script scans for CSV file, and this thing will cause issues
+2. Populate the folder with weather data from NOAA. Found here: https://www.ncei.noaa.gov/cdo-web/datatools/lcd. I use the LaGuardia dataset, which corresponds with the New York citibike dataset used for bikes
