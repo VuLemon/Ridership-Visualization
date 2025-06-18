@@ -1,6 +1,4 @@
 request.ipynb
-citi_bike_data_*.csv
-final_output/
+*.csv
 .DS_Store
-weather_data.csv
 artifacts
