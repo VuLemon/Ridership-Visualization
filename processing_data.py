@@ -8,6 +8,9 @@ import sklearn
 
 import os
 
+import joblib
+
+
 spark = SparkSession.builder.appName("myApp").getOrCreate()
 
 bike_folder_path = "./historical_datasets/Bike Historical Data"
@@ -21,40 +24,10 @@ def main():
     weather_df = broadcast(weather_df)
     process_bike_files(weather_df)
     final_df = spark.read.csv("./processed_dataset/*", header= True).toPandas()
-    save_one_hot_encoded_data(final_df)
+    save_processed_data(final_df)
     save_raw_data(final_df)
     if os.path.exists("./processed_dataset"):
         shutil.rmtree("./processed_dataset")
-
-
-    
-
-def load_weather_data():
-    weather_df = spark.read.csv(weather_path, header=True)
-    weather_df = clean_weather_table(weather_df)
-    return weather_df
-
-def clean_weather_table(df):
-    df = df.filter(col("HourlyDryBulbTemperature").isNotNull()).select("DATE", "HourlyDryBulbTemperature")
-    df = truncate_time_weather(df)
-    df = cast_temperature_as_integer(df)
-    return df
-    
-def truncate_time_weather(df):
-    df = df.withColumn("time", to_timestamp(df.DATE))
-    df = df.withColumn("time", date_trunc("hour", "time"))
-    df = df.withColumn("hour", hour("time"))
-    df = df.withColumn("weekday", date_format("time", "EEEE"))
-    df = df.select("weekday", "hour", "HourlyDryBulbTemperature")
-    return df
-
-def cast_temperature_as_integer(df):
-    df = df.withColumn("HourlyDryBulbTemperature", regexp_replace("HourlyDryBulbTemperature",'s$',''))
-    df = df.withColumn("HourlyDryBulbTemperature", col("HourlyDryBulbTemperature").cast(IntegerType()))
-    return df.groupBy("hour","weekday").agg(avg("HourlyDryBulbTemperature"))
-
-
-
 
 def process_bike_files(weather_df):
     for i, file in enumerate(bike_file_list):
@@ -63,6 +36,7 @@ def process_bike_files(weather_df):
         joined_data.printSchema()
         joined_data.show(1, truncate=False)
         joined_data.write.mode("overwrite").option("header", True).csv(f"./processed_dataset/batch_{i}")
+
 
 def load_bike_data(file):
     df = spark.read.csv(file,header = True)
@@ -109,12 +83,52 @@ def truncate_time_bike(df):
 
 
 
+def load_weather_data():
+    weather_df = spark.read.csv(weather_path, header=True)
+    weather_df = clean_weather_table(weather_df)
+    return weather_df
 
-def save_one_hot_encoded_data(df):
+def clean_weather_table(df):
+    df = df.filter(col("HourlyDryBulbTemperature").isNotNull()).select("DATE", "HourlyDryBulbTemperature")
+    df = truncate_time_weather(df)
+    df = cast_temperature_as_integer(df)
+    return df
+    
+def truncate_time_weather(df):
+    df = df.withColumn("time", to_timestamp(df.DATE))
+    df = df.withColumn("time", date_trunc("hour", "time"))
+    df = df.withColumn("hour", hour("time"))
+    df = df.withColumn("weekday", date_format("time", "EEEE"))
+    df = df.select("weekday", "hour", "HourlyDryBulbTemperature")
+    return df
+
+def cast_temperature_as_integer(df):
+    df = df.withColumn("HourlyDryBulbTemperature", regexp_replace("HourlyDryBulbTemperature",'s$',''))
+    df = df.withColumn("HourlyDryBulbTemperature", col("HourlyDryBulbTemperature").cast(IntegerType()))
+    return df.groupBy("hour","weekday").agg(avg("HourlyDryBulbTemperature"))
+
+
+
+
+
+
+
+def save_processed_data(df):
+    df = normalize_temperature(df)
+    df = one_hot_encode_data(df)
+    df.to_csv("final_output/clean_data.csv", index=False, header=True)
+
+
+def normalize_temperature(df):
+    scaler = sklearn.preprocessing.MinMaxScaler()
+    df['HourlyDryBulbTemperature_scaled'] = scaler.fit_transform(df[['avg(HourlyDryBulbTemperature)']])
+    joblib.dump(scaler, 'scaler.pkl')
+    return df
+
+def one_hot_encode_data(df):
+
     enc = sklearn.preprocessing.OneHotEncoder(handle_unknown='ignore', sparse_output= False)
-    df.head(5)
     one_hot_encoded = enc.fit_transform(df[['weekday', 'hour', 'station_id']])
-    enc.categories_
 
     one_hot_df = pd.DataFrame(
         one_hot_encoded,
@@ -124,13 +138,17 @@ def save_one_hot_encoded_data(df):
     df_encoded = pd.concat([df, one_hot_df], axis=1)
 
     df_encoded = df_encoded.drop(['weekday','hour','station_id'], axis=1)
+    return df_encoded
+    
 
-    df_encoded.to_csv("final_output/clean_data.csv", index=False, header=True)
 
 def save_raw_data(df):
     df.to_csv("final_output/raw_data.csv", index=False, header=True)
 
 
+
+
+    
+    
+
 main()
-
-
