@@ -1,2 +1,4 @@
-1. Remove this instruction file before running. The main script scans for CSV file, and this thing will cause issues
-2. Populate this file with citi_bike_data. Source can be found here: https://www.kaggle.com/datasets/rosenthal/citi-bike-stations/data. Unarchive, then place the datasets in here
+THIS FOLDER WILL CONTAIN THE HISTORICAL CITI BIKE DATA TO BE USED FOR ML TRAINING
+
+Populate this file with citi_bike_data. Source can be found here: https://www.kaggle.com/datasets/rosenthal/citi-bike-stations/data. Unarchive, then place the datasets in here
+Note: The dataset is missing some data from 2016 to 2019. I have decided to leave it as is, and find weather data from 2019 to 2021. Upon joining tables, the missing data will naturally be excluded

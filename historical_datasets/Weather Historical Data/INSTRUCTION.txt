@@ -1,2 +1,4 @@
-1. Remove this instruction file before running. The main script scans for CSV file, and this thing will cause issues
-2. Populate the folder with weather data from NOAA. Found here: https://www.ncei.noaa.gov/cdo-web/datatools/lcd. I use the LaGuardia dataset, which corresponds with the New York citibike dataset used for bikes
+THIS FOLDER WILL CONTAIN THE HISTORICAL WEATHER DATA TO BE USED FOR ML TRAINING
+
+Populate the folder with weather data from NOAA. Found here: https://www.ncei.noaa.gov/cdo-web/datatools/lcd. Since the citi-bike data comes from New York, I decided to go for weather data from the LaGuardia Airport station. 
+Data set ranges from 2019 to 2021, corresponding with the time stamp for citi-bike data

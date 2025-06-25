@@ -1,1 +1,21 @@
-Keep this folder. The preprocessing script will write their files in here. 
+THIS FOLDER WILL CONTAIN THE FINAL PARQUET FILES FOR BOTH PROCESSED DATA AND RAW DATA
+
+1. The raw data will contain 4 fields: 
+ |-- time: timestamp (nullable = true)
+ |-- station_id: string (nullable = true)
+ |-- avg(availability): double (nullable = true)
+ |-- avg(HourlyDryBulbTemperature): double (nullable = true)
+
+These are the data fields upon joining the 2 weather and bike datasets. I want to keep a copy to verify that the 2 datasets are joined successfully, and to refer back to the raw data for easy debugging in the future
+
+2. The cleaned data will contain 5 fields:
+ |-- avg(availability): double (nullable = true)
+ |-- temperature_scaled: vector (nullable = true)
+ |-- hour_vec: vector (nullable = true)
+ |-- weekday_vec: vector (nullable = true)
+ |-- station_vec: vector (nullable = true)
+
+ The temperature is scaled using MinMaxScaling (0-1). 
+ The weekday and the hour is derived from the timestamp, and is considered categorical features, which is one-hot encoded
+ The station id is also categorical features, which is one-hot encoded
+
