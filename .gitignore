@@ -1,4 +1,6 @@
-request.ipynb
+*.ipynb
 *.csv
 .DS_Store
 artifacts
+cleaned_data
+raw_data
