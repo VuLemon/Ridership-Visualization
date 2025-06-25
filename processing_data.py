@@ -26,6 +26,9 @@ bike_file_list = [os.path.join(bike_folder_path, f) for f in os.listdir(bike_fol
 
 
 
+
+
+
 def load_bike_data(file):
     df = spark.read.csv(file,header = True)
     df = remove_null_values_from_record(df)
@@ -67,7 +70,6 @@ def truncate_time_bike(df):
     # return availability
 
 
-
 def load_weather_data():
     weather_df = spark.read.csv(weather_path, header=True)
     weather_df = clean_weather_table(weather_df)
@@ -87,10 +89,7 @@ def truncate_time_weather(df):
 def cast_temperature_as_integer(df):
     df = df.withColumn("HourlyDryBulbTemperature", regexp_replace("HourlyDryBulbTemperature",'s$','')) #Some number ends in s, like 74s for some reason
     df = df.withColumn("HourlyDryBulbTemperature", col("HourlyDryBulbTemperature").cast(IntegerType()))
-    df = df.groupBy("time").agg(avg("HourlyDryBulbTemperature"))
-    df.printSchema()
     return df.groupBy("time").agg(avg("HourlyDryBulbTemperature"))
-
 
 
 def process_bike_files(weather_df):
@@ -99,7 +98,7 @@ def process_bike_files(weather_df):
         joined_data = bike_df.join(weather_df, on=["time"])
         joined_data.printSchema()
         joined_data.show(1, truncate=False)
-        joined_data.write.mode("overwrite").option("header", True).csv(f"./processed_dataset/batch_{i}")
+        joined_data.write.mode("overwrite").option("header", True).parquet(f"./processed_dataset/batch_{i}")
 
 
 def save_processed_data(df):
@@ -108,7 +107,19 @@ def save_processed_data(df):
     df = normalize_temperature(df)
     df = one_hot_encode_data(df)
     df.printSchema()
-    df.drop("temp_vec").write.mode("overwrite").option("header", True).csv("./final_output/cleaned_data")
+    df = df.withColumn("avg(availability)", col("avg(availability)").cast(DoubleType()))
+    df = df.drop(
+        "time",
+        "station_id",
+        "hour",
+        "weekday",
+        "avg(HourlyDryBulbTemperature)",
+        "temp_vec",
+        "hour_index",
+        "weekday_index",
+        "station_id_index"
+    )
+    df.write.mode("overwrite").parquet("./final_output/cleaned_data")
 
 
 def normalize_temperature(df):
@@ -123,11 +134,6 @@ def normalize_temperature(df):
     # Step 2: Transform to get scaled vector column
     df_scaled = scaler_model.transform(vector_dataframe)
 
-    # Step 3: Extract the first (and only) element of the scaled vector into a scalar column
-    df_scaled = df_scaled.withColumn("temp_scaled", vector_to_array("temperature_scaled")[0])
-
-    df_scaled = df_scaled.drop("temp_vec", "temperature_scaled")
-
     print("finished normalizing temperature")
     return df_scaled
 
@@ -140,11 +146,6 @@ def one_hot_encode_data(df):
     df = weekday_indexer.transform(df)
     df = station_indexer.transform(df)
 
-    # Save labels
-    hour_labels = hour_indexer.labels
-    weekday_labels = weekday_indexer.labels
-    station_labels = station_indexer.labels
-
     # Step 2: OneHotEncoder
     encoder = OneHotEncoder(
         inputCols=["hour_index", "weekday_index", "station_id_index"],
@@ -152,11 +153,6 @@ def one_hot_encode_data(df):
         dropLast= False  # <-- NOTE: output should be station_vec not station_id_vec
     )
     df_encoded = encoder.fit(df).transform(df)
-
-    # Step 3: Expand one-hot vectors to individual columns
-    df_encoded = expand_onehot(df_encoded, "hour_vec", hour_labels, "hour")
-    df_encoded = expand_onehot(df_encoded, "weekday_vec", weekday_labels, "weekday")
-    df_encoded = expand_onehot(df_encoded, "station_vec", station_labels, "station")  # <-- Match name
 
     df_encoded.printSchema()
 
@@ -167,22 +163,9 @@ def one_hot_encode_data(df):
     print("✅ Finished one-hot encoding with readable column names")
     return df_encoded
 
-    
-
-def expand_onehot(df, vec_col, labels, prefix):
-    """
-    Turns a one-hot vector column into individual columns with label-based names.
-    """
-    df = df.withColumn(f"{vec_col}_arr", vector_to_array(vec_col))
-    for i, label in enumerate(labels):
-        clean_label = re.sub(r"\W+", "", label)  # Remove special chars just in case
-        df = df.withColumn(f"{prefix}_{clean_label}", col(f"{vec_col}_arr")[i])
-        print(f"Creating column {prefix}_{clean_label}")
-    return df.drop(vec_col).drop(f"{vec_col}_arr")
-
 
 def save_raw_data(df):
-    df.write.mode("overwrite").option("header", True).csv("./final_output/raw_data")
+    df.write.mode("overwrite").option("header", True).parquet("./final_output/raw_data")
 
 
 
@@ -196,7 +179,7 @@ def main():
     combined_df = None
 
     for path in batch_paths:
-        df = spark.read.option("header", True).csv(path)
+        df = spark.read.option("header", True).parquet(path)
         if combined_df is None:
             combined_df = df
         else:
@@ -206,9 +189,9 @@ def main():
     combined_df = combined_df.coalesce(1)
 
     # Write to final output directory
-    combined_df.write.mode("overwrite").option("header", True).csv("./intermediate")
+    combined_df.write.mode("overwrite").option("header", True).parquet("./intermediate")
 
-    final_df = spark.read.csv("./intermediate", header=True)
+    final_df = spark.read.parquet("./intermediate", header=True)
     save_processed_data(final_df)
     save_raw_data(final_df)
     if os.path.exists("./processed_dataset"):
