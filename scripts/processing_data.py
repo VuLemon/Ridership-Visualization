@@ -26,9 +26,6 @@ bike_file_list = [os.path.join(bike_folder_path, f) for f in os.listdir(bike_fol
 
 
 
-
-
-
 def load_bike_data(file):
     df = spark.read.csv(file,header = True)
     df = remove_null_values_from_record(df)
