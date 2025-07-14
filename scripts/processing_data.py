@@ -2,18 +2,10 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_unixtime, date_trunc, col, when, avg, to_timestamp, regexp_replace, broadcast, hour, date_format
 from pyspark.sql.types import IntegerType, DoubleType
-from pyspark.ml.functions import vector_to_array
 import shutil
-import pandas as pd
-import sklearn
 from pathlib import Path
 from pyspark.ml.feature import OneHotEncoder, MinMaxScaler, VectorAssembler, StringIndexer
-
 import os
-
-import re
-
-import joblib
 
 
 spark = SparkSession.builder.appName("myApp").getOrCreate()
@@ -25,6 +17,13 @@ weather_path = "./historical_datasets/Weather Historical Data/weather_data.csv"
 bike_file_list = [os.path.join(bike_folder_path, f) for f in os.listdir(bike_folder_path) if f.endswith(".csv")] # Makes sure it's a CSV file
 
 
+def process_bike_files(weather_df):
+    for i, file in enumerate(bike_file_list):
+        bike_df = load_bike_data(file)
+        joined_data = bike_df.join(weather_df, on=["time"])
+        joined_data.printSchema()
+        joined_data.show(1, truncate=False)
+        joined_data.write.mode("overwrite").option("header", True).parquet(f"./processed_dataset/batch_{i}")
 
 def load_bike_data(file):
     df = spark.read.csv(file,header = True)
@@ -89,13 +88,6 @@ def cast_temperature_as_integer(df):
     return df.groupBy("time").agg(avg("HourlyDryBulbTemperature"))
 
 
-def process_bike_files(weather_df):
-    for i, file in enumerate(bike_file_list):
-        bike_df = load_bike_data(file)
-        joined_data = bike_df.join(weather_df, on=["time"])
-        joined_data.printSchema()
-        joined_data.show(1, truncate=False)
-        joined_data.write.mode("overwrite").option("header", True).parquet(f"./processed_dataset/batch_{i}")
 
 
 def save_processed_data(df):
@@ -143,19 +135,14 @@ def one_hot_encode_data(df):
     df = weekday_indexer.transform(df)
     df = station_indexer.transform(df)
 
-    # Step 2: OneHotEncoder
     encoder = OneHotEncoder(
         inputCols=["hour_index", "weekday_index", "station_id_index"],
         outputCols=["hour_vec", "weekday_vec", "station_vec"],
-        dropLast= False  # <-- NOTE: output should be station_vec not station_id_vec
+        dropLast= False  
     )
     df_encoded = encoder.fit(df).transform(df)
 
     df_encoded.printSchema()
-
-    # No need to drop again here (already dropped inside expand_onehot)
-    # But if you keep it, make sure names match:
-    # df_encoded = df_encoded.drop("hour_vec", "weekday_vec", "station_vec")  # <-- Fix column name here
 
     print("✅ Finished one-hot encoding with readable column names")
     return df_encoded

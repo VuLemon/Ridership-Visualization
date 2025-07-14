@@ -18,4 +18,5 @@ These are the data fields upon joining the 2 weather and bike datasets. I want t
  The temperature is scaled using MinMaxScaling (0-1). 
  The weekday and the hour is derived from the timestamp, and is considered categorical features, which is one-hot encoded
  The station id is also categorical features, which is one-hot encoded
+ This will be the dataset used for the ML script
 

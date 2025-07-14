@@ -1,5 +1,5 @@
 *.ipynb
-*.csv
+historical_datasets/Bike Historical Data/*.csv
 .DS_Store
 artifacts
 cleaned_data
