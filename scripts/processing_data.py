@@ -15,38 +15,24 @@ bike_folder_path = "./historical_datasets/Bike Historical Data"
 
 weather_path = "./historical_datasets/Weather Historical Data/weather_data.csv"
 
+DEFAULT_NULL_VALUE = "0"
+NULL_VALUE_PATTERN = "\\N"
+ZERO_CAPACITY = 0
+MAX_AVAILABILITY = 1.0
+AVAILABILITY_CAP_THRESHOLD = 1.0
+FINAL_PARTITION_COUNT = 1
+
 
 
 ## MAIN METHOD OF SCRIPT ##
 def main():
     generate_bike_files()
     weather_df = load_weather_data()
-    weather_df = broadcast(weather_df)
     process_bike_files(weather_df)
-    batch_paths = sorted(str(p) for p in Path("./processed_dataset").glob("batch_*"))
-
-    combined_df = None
-
-    for path in batch_paths:
-        df = spark.read.option("header", True).parquet(path)
-        if combined_df is None:
-            combined_df = df
-        else:
-            combined_df = combined_df.unionByName(df)
-
-    combined_df = combined_df.coalesce(1)
-    combined_df.write.mode("overwrite").option("header", True).parquet("./intermediate")
-    final_df = spark.read.parquet("./intermediate", header=True)
+    final_df = combine_data()
     save_processed_data(final_df)
     save_raw_data(final_df)
-    if os.path.exists("./processed_dataset"):
-        shutil.rmtree("./processed_dataset")
-    if os.path.exists("./intermediate"):
-        shutil.rmtree("./intermediate")
-    
-
-
-
+    remove_intermediate_files()
 
 ## GENERATES HISTORICAL BIKE DATA ##
 def generate_bike_files():
@@ -70,6 +56,7 @@ def generate_bike_files():
 def load_weather_data():
     weather_df = spark.read.csv(weather_path, header=True)
     weather_df = clean_weather_table(weather_df)
+    weather_df = broadcast(weather_df)
     return weather_df
 
 def clean_weather_table(df):
@@ -130,7 +117,7 @@ def remove_null_values_from_record(df):
     return df
 
 def remove_null_from_column(column_name):
-    return (when((col(column_name)) == "\\N", "0").otherwise(col(column_name))).cast(IntegerType())
+    return (when((col(column_name)) == NULL_VALUE_PATTERN, DEFAULT_NULL_VALUE).otherwise(col(column_name))).cast(IntegerType())
 
 def clean_bike_table(df):
     df = df.withColumn("availability", calculate_bike_availability(df))
@@ -140,16 +127,30 @@ def clean_bike_table(df):
 
 def calculate_bike_availability(df):
     availability = (df.num_bikes_available + df.num_ebikes_available) / df.capacity
-    return when(df.capacity == 0, 1).when(availability > 1, 1).otherwise(availability)
+    return when(df.capacity == ZERO_CAPACITY, MAX_AVAILABILITY).when(availability > MAX_AVAILABILITY, AVAILABILITY_CAP_THRESHOLD).otherwise(availability)
 
 def truncate_time_bike(df):
     df = df.withColumn("date", from_unixtime("station_status_last_reported"))
     df = df.withColumn("time", date_trunc("hour", "date"))
     return df
-    # return availability
 
+## COMBINES DATA FROM ALL BATCHES ##
+def combine_data():
+    batch_paths = sorted(str(p) for p in Path("./processed_dataset").glob("batch_*"))
 
+    combined_df = None
 
+    for path in batch_paths:
+        df = spark.read.option("header", True).parquet(path)
+        if combined_df is None:
+            combined_df = df
+        else:
+            combined_df = combined_df.unionByName(df)
+
+    combined_df = combined_df.coalesce(1)
+    combined_df.write.mode("overwrite").option("header", True).parquet("./intermediate")
+    final_df = spark.read.parquet("./intermediate", header=True)
+    return final_df
 
 
 ## ENCODES AND SAVES DATA AS SPARK DFs ##
@@ -212,6 +213,12 @@ def one_hot_encode_data(df):
 def save_raw_data(df):
     df.write.mode("overwrite").option("header", True).parquet("./final_output/raw_data")
 
-    
+
+## REMOVES INTERMEDIATE FILES ##
+def remove_intermediate_files():
+    if os.path.exists("./intermediate"):
+        shutil.rmtree("./intermediate")
+    if os.path.exists("./processed_dataset"):
+        shutil.rmtree("./processed_dataset")
 
 main()
